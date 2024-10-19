@@ -1,0 +1,21 @@
+{
+  "name": "new-participedia-chatbot",
+  "version": "1.0.0",
+  "main": "new_chatbot.js",
+  "scripts": {
+    "start": "node new_chatbot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "csv-parser": "^3.0.0",
+    "dotenv": "^16.4.5",
+    "elasticsearch": "^16.7.3",
+    "express": "^4.21.1",
+    "openai": "^4.68.1"
+  },
+  "description": ""
+}

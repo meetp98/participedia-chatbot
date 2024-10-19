@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Participedia Chatbot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .chat-box {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 10px;
+      height: 400px;
+      overflow-y: scroll;
+      background-color: #fafafa;
+    }
+    .chat-message {
+      margin: 10px 0;
+    }
+    .user-message {
+      text-align: right;
+      color: blue;
+    }
+    .bot-message {
+      text-align: left;
+      color: green;
+    }
+    input[type="text"] {
+      width: 80%;
+      padding: 10px;
+      margin-top: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      width: 15%;
+      padding: 10px;
+      margin-top: 10px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #218838;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Participedia Chatbot</h1>
+    <div class="chat-box" id="chat-box">
+      <!-- Chat messages will be displayed here -->
+    </div>
+    <input type="text" id="user-input" placeholder="Type your question here...">
+    <button onclick="sendMessage()">Send</button>
+  </div>
+
+  <script>
+    // Function to add messages to chat box
+    function addMessage(message, isUser = false) {
+      const chatBox = document.getElementById('chat-box');
+      const messageElem = document.createElement('div');
+      messageElem.classList.add('chat-message');
+      messageElem.classList.add(isUser ? 'user-message' : 'bot-message');
+      messageElem.textContent = message;
+      chatBox.appendChild(messageElem);
+      chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll to bottom
+    }
+
+    // Function to send user input to the backend
+    async function sendMessage() {
+      const userInput = document.getElementById('user-input').value;
+      if (userInput.trim() === '') return;
+
+      // Display user message
+      addMessage(userInput, true);
+      document.getElementById('user-input').value = ''; // Clear input field
+
+      try {
+        // Send message to backend
+        const response = await fetch('http://localhost:3000/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: userInput }),
+        });
+
+        const data = await response.json();
+
+        // Display bot response
+        if (data.reply) {
+          addMessage(data.reply, false);
+        } else {
+          addMessage('Sorry, there was an error processing your request.', false);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        addMessage('Unable to connect to the server. Please try again later.', false);
+      }
+    }
+
+    // Trigger send message on pressing Enter key
+    document.getElementById('user-input').addEventListener('keypress', function(event) {
+      if (event.key === 'Enter') {
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>

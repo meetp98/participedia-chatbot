@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Participedia Chatbot</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f4f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .container {
+      width: 90%;
+      max-width: 400px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background-color: #000;
+      color: #fff;
+      padding: 15px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .header img {
+      width: 50px; /* Adjust size as needed */
+      margin-right: 10px;
+    }
+    .chat-box {
+      flex: 1;
+      padding: 15px;
+      background-color: #f4f4f4;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-message {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 70%;
+    }
+    .user-message {
+      background-color: #ffe066;
+      color: #000;
+      align-self: flex-end;
+    }
+    .bot-message {
+      background-color: #333;
+      color: #fff;
+      align-self: flex-start;
+    }
+    .pre-built-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin: 10px 0;
+    }
+    .pre-built-button {
+      background-color: #fff;
+      color: #1a73e8;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      cursor: pointer;
+      text-align: left;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .pre-built-button:hover {
+      background-color: #f0f0f0;
+    }
+    .footer {
+      display: flex;
+      padding: 10px;
+      border-top: 1px solid #ccc;
+      background: #fff;
+    }
+    .footer input[type="text"] {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-right: 10px;
+    }
+    .footer button {
+      background-color: #000;
+      color: #fff;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .footer button:hover {
+      background-color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="Participedia-crop-406x146.jpeg" alt="Participedia Logo">
+      Participedia Chatbot
+    </div>
+    <div class="chat-box" id="chat-box">
+      <div class="chat-message bot-message">Hello! How can I help you today?</div>
+      <div class="pre-built-buttons">
+        <button class="pre-built-button" onclick="preBuiltQuestion('How can we register for cases?')">📄 How can we register for cases?</button>
+        <button class="pre-built-button" onclick="preBuiltQuestion('How to add new organizations?')">🏢 How to add new organizations?</button>
+        <button class="pre-built-button" onclick="preBuiltQuestion('Find organizations working on participatory governance.')">🔍 Find organizations working on participatory governance.</button>
+      </div>
+    </div>
+    <div class="footer">
+      <input type="text" id="user-input" placeholder="Type your question here...">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // Function to add messages to chat box
+    function addMessage(message, isUser = false) {
+      const chatBox = document.getElementById('chat-box');
+      const messageElem = document.createElement('div');
+      messageElem.classList.add('chat-message');
+      messageElem.classList.add(isUser ? 'user-message' : 'bot-message');
+      messageElem.textContent = message;
+      chatBox.appendChild(messageElem);
+      chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll to bottom
+    }
+
+    // Function to handle pre-built questions
+    function preBuiltQuestion(question) {
+      document.getElementById('user-input').value = question;
+      sendMessage();
+    }
+
+    // Function to send user input to the backend
+    async function sendMessage() {
+      const userInput = document.getElementById('user-input').value;
+      if (userInput.trim() === '') return;
+
+      // Display user message
+      addMessage(userInput, true);
+      document.getElementById('user-input').value = ''; // Clear input field
+
+      try {
+        // Send message to backend
+        const response = await fetch('http://localhost:3000/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: userInput }),
+        });
+
+        const data = await response.json();
+
+        // Display bot response
+        if (data.reply) {
+          addMessage(data.reply, false);
+        } else {
+          addMessage('Sorry, there was an error processing your request.', false);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        addMessage('Unable to connect to the server. Please try again later.', false);
+      }
+    }
+
+    // Trigger send message on pressing Enter key
+    document.getElementById('user-input').addEventListener('keypress', function(event) {
+      if (event.key === 'Enter') {
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>
