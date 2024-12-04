@@ -4,9 +4,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Load the cleaned datasets
-cases_df = pd.read_csv(r"C:\Users\Meet\Documents\ALY 6980 Capstone\Chatbot Mixture\cleaned_cases.csv")
-methods_df = pd.read_csv(r"C:\Users\Meet\Documents\ALY 6980 Capstone\Chatbot Mixture\cleaned_methods.csv")
-organizations_df = pd.read_csv(r"C:\Users\Meet\Documents\ALY 6980 Capstone\Chatbot Mixture\cleaned_organizations.csv")
+cases_df = pd.read_csv("cleaned_cases.csv")
+methods_df = pd.read_csv("cleaned_methods.csv")
+organizations_df = pd.read_csv("cleaned_organizations.csv")
 
 # Combine text for vectorization
 all_text = pd.concat([
