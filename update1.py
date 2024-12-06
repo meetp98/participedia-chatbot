@@ -19,8 +19,43 @@ all_text = pd.concat([
 vectorizer = TfidfVectorizer()
 text_vectors = vectorizer.fit_transform(all_text)
 
-# Define chatbot logic
+# Prebuilt questions categorized
+categories = {
+    "General": {
+        "What is Participedia and how does it work?":
+            "Participedia is a platform for sharing and collecting information on inclusive civic engagement and democratic innovations around the world. Users can browse case studies, methods, and organizations related to participatory governance. More information can be found here: https://participedia.net/about",
+        "How can I contribute to Participedia?":
+            "You can contribute to Participedia by adding new case studies, methods, or organizations, or by editing and improving existing content. Find out more about how to contribute here: https://participedia.net/getting-started",
+        "Can I use Participedia for my research or teaching?":
+            "Yes, Participedia is a valuable resource for researchers and educators looking for examples of democratic innovations. The platform offers a repository of information on various participatory processes that can be accessed and used for academic purposes. Explore the research and teaching tools available on Participedia here: https://participedia.net/teaching"
+    },
+    "Cases": {
+        "What is participatory budgeting, and how is it implemented?":
+            "Participatory budgeting is a democratic process in which community members directly decide how to allocate part of a public budget. It typically involves a series of meetings and deliberations where residents propose and vote on projects to be funded with public money. Learn more: https://participedia.net/case/5524",
+        "Can you tell me about a case where citizen engagement improved governance?":
+            "One example is the participatory budgeting process in Porto Alegre, Brazil. This initiative allowed citizens to directly participate in deciding how municipal funds were allocated, leading to better allocation of resources and increased trust in government. Learn more: https://participedia.net/case/5524",
+        "What is an example of participatory democracy in education?":
+            "One example is the 'Student Voice Committee' in New Zealand, where students collaborate with staff to provide feedback for improving the school environment. Learn more: https://participedia.net/case/4196"
+    },
+    "Methods": {
+        "What is deliberative democracy?":
+            "Deliberative democracy involves public decisions made through thoughtful discussions among citizens. For example, the G1000 in Belgium brought together randomly selected citizens to deliberate on policy issues. Learn more: https://participedia.net/case/485",
+        "How does a citizen assembly work?":
+            "A citizen assembly is a deliberative process that brings together randomly selected citizens to discuss and make decisions on a particular issue. For example: https://participedia.net/case/5166",
+        "What are participatory budgeting methods?":
+            "Participatory budgeting methods include deliberative forums, voting, and citizen engagement. An example is the 'Porto Alegre Participatory Budgeting Process' in Brazil: https://participedia.net/case/44"
+    },
+    "Organizations": {
+        "What organizations promote participatory governance globally?":
+            "Organizations like the Participatory Budgeting Project (https://participedia.net/organization/4377) and IAP2 (https://participedia.net/organization/231) promote participatory governance globally.",
+        "Can you tell me about organizations working on environmental democracy?":
+            "Examples include the Environmental Democracy Index (https://participedia.net/en/organizations/international-union-conservation-nature-iucn) and the International Union for Conservation of Nature (https://participedia.net/organization/1053)."
+    }
+}
+
+# Define chatbot logic for user input
 def chatbot_response(user_query):
+    # TF-IDF logic for custom questions
     query_vector = vectorizer.transform([user_query])
     similarity_scores = cosine_similarity(query_vector, text_vectors)
     max_score_idx = similarity_scores.argmax()
@@ -42,56 +77,31 @@ def chatbot_response(user_query):
 
 # Streamlit UI
 st.set_page_config(page_title="Participatory Democracy Chatbot", layout="wide")
-st.title("Participatory Democracy Chatbot Dashboard 🤖")
-st.write("Welcome! I can help you explore participatory democracy cases, methods, and organizations.")
+st.title("Participatory Democracy Chatbot ")
+st.write("Welcome! Select a category and ask a question or type your own.")
 
-# Greet user and provide options
-st.sidebar.header("Choose a Category")
-category = st.sidebar.selectbox(
-    "Select a category to get started:",
-    ["General", "Cases", "Methods", "Organizations"]
-)
+# Dropdown for categories
+category = st.selectbox("Choose a category:", ["Choose a category"] + list(categories.keys()))
 
-# Provide instructions based on category
-if category == "General":
-    st.subheader("Welcome to the Participatory Democracy Chatbot!")
-    st.write("Ask me anything about participatory democracy. For example:")
-    st.write("- What is participatory budgeting?")
-    st.write("- How do citizens deliberate?")
-elif category == "Cases":
-    st.subheader("Ask me about Cases!")
-    st.write("Examples of questions:")
-    st.write("- Tell me about participatory budgeting.")
-    st.write("- What is the case about community engagement?")
-elif category == "Methods":
-    st.subheader("Ask me about Methods!")
-    st.write("Examples of questions:")
-    st.write("- What is deliberative democracy?")
-    st.write("- How does citizen assembly work?")
-elif category == "Organizations":
-    st.subheader("Ask me about Organizations!")
-    st.write("Examples of questions:")
-    st.write("- Which organization focuses on youth?")
-    st.write("- What organizations promote participatory governance?")
+# Display prebuilt questions for the selected category
+if category != "Choose a category":
+    st.subheader(f"Questions for {category}")
+    selected_question = st.selectbox("Choose a question to get started:", ["Choose a question"] + list(categories[category].keys()))
 
-# Chat interface
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+    # User input for custom query
+    st.subheader("Ask Your Own Question")
+    user_query = st.text_input("Your question:")
 
-user_query = st.text_input("Your question:")
-
-if st.button("Submit"):
-    if user_query.strip():
-        response = chatbot_response(user_query)
-        st.session_state.chat_history.append({"user": user_query, "bot": response})
-
-# Display chat history
-if st.session_state.chat_history:
-    st.write("### Chat History")
-    for chat in st.session_state.chat_history:
-        st.markdown(f"**You:** {chat['user']}")
-        st.markdown(f"**Bot:** {chat['bot']}")
-        st.markdown("---")
+    # Submit button
+    if st.button("Submit"):
+        # Display answer for prebuilt question
+        if selected_question and selected_question != "Choose a question":
+            st.write("**Answer:**")
+            st.markdown(categories[category][selected_question])
+        # Display answer for custom query
+        elif user_query.strip():
+            st.write("**Answer:**")
+            st.markdown(chatbot_response(user_query))
 
 # Footer
 st.sidebar.write("This chatbot is powered by Participedia datasets and Streamlit.")
