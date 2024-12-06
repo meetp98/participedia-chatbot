@@ -34,8 +34,42 @@ tfidf_vectors = vectorizer.fit_transform(all_texts)
 case_count = len(cases_texts)
 method_count = len(methods_texts)
 
-# Combined Search Function: Semantic + TF-IDF with Suggestions
-def combined_search_with_suggestions(query, semantic_weight=0.7, tfidf_weight=0.3, top_k=1, suggestion_k=3):
+# Prebuilt questions categorized
+categories = {
+    "General": {
+        "What is Participedia and how does it work?":
+            "Participedia is a platform for sharing and collecting information on inclusive civic engagement and democratic innovations around the world. More info: https://participedia.net/about",
+        "How can I contribute to Participedia?":
+            "You can contribute by adding new case studies, methods, or organizations. More info: https://participedia.net/getting-started",
+        "Can I use Participedia for research or teaching?":
+            "Yes, Participedia is a valuable resource for researchers and educators. Explore: https://participedia.net/teaching"
+    },
+    "Cases": {
+        "What is participatory budgeting, and how is it implemented?":
+            "Participatory budgeting is a democratic process in which community members directly decide how to allocate part of a public budget. Learn more: https://participedia.net/case/5524",
+        "Can you tell me about a case where citizen engagement improved governance?":
+            "One example is participatory budgeting in Porto Alegre, Brazil, which improved resource allocation. More info: https://participedia.net/case/5524",
+        "What is an example of participatory democracy in education?":
+            "One example is the 'Student Voice Committee' in New Zealand. Learn more: https://participedia.net/case/4196"
+    },
+    "Methods": {
+        "What is deliberative democracy?":
+            "Deliberative democracy involves public decisions made through thoughtful discussions. Learn more: https://participedia.net/case/485",
+        "How does a citizen assembly work?":
+            "A citizen assembly brings together randomly selected citizens to discuss and make decisions. More info: https://participedia.net/case/5166",
+        "What are participatory budgeting methods?":
+            "Participatory budgeting methods include forums, voting, and direct engagement. Example: https://participedia.net/case/44"
+    },
+    "Organizations": {
+        "What organizations promote participatory governance globally?":
+            "Organizations like Participatory Budgeting Project and IAP2 promote participatory governance. More info: https://participedia.net/organization/4377",
+        "Can you tell me about organizations working on environmental democracy?":
+            "Examples include the Environmental Democracy Index and the International Union for Conservation of Nature. More info: https://participedia.net/organization/1053"
+    }
+}
+
+# Combined Search Function: Semantic + TF-IDF with Related Suggestions
+def combined_search(query, semantic_weight=0.7, tfidf_weight=0.3, top_k=3, suggestion_threshold=0.5):
     # Encode the query using SentenceTransformer
     query_embedding = model.encode(query, convert_to_tensor=True)
     semantic_scores = util.cos_sim(query_embedding, all_embeddings)[0]  # Semantic similarity scores
@@ -46,73 +80,64 @@ def combined_search_with_suggestions(query, semantic_weight=0.7, tfidf_weight=0.
 
     # Combine the scores
     combined_scores = semantic_weight * semantic_scores + tfidf_weight * tfidf_scores
-    top_results = combined_scores.topk(k=top_k)  # Get top-k main results
+    top_results = combined_scores.topk(k=top_k)  # Get top-k results
 
-    # Primary result
-    main_result = None
-    if top_results.values[0].item() > 0.5:  # Strict threshold for the main result
-        idx = top_results.indices[0].item()
-        score = top_results.values[0].item()
+    results = []
+    suggestions = []  # Store suggestions for related items
 
-        if idx < case_count:
+    for score, idx in zip(top_results.values, top_results.indices):
+        idx = idx.item()
+        score = score.item()  # Convert tensor to Python float for display
+
+        # Filter results by a minimum threshold
+        if score < suggestion_threshold:
+            continue
+
+        if idx < case_count:  # Result from cases
             result = cases_df.iloc[idx]
-            main_result = f"Case: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "cases"
-        elif idx < case_count + method_count:
+            results.append(f"Case: {result['title']} - {result['description']} [Link: {result['url']}]")
+            suggestions.append(f"[Case] {result['title']} - {result['url']}")
+        elif idx < case_count + method_count:  # Result from methods
             result = methods_df.iloc[idx - case_count]
-            main_result = f"Method: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "methods"
-        else:
+            results.append(f"Method: {result['title']} - {result['description']} [Link: {result['url']}]")
+            suggestions.append(f"[Method] {result['title']} - {result['url']}")
+        else:  # Result from organizations
             result = organizations_df.iloc[idx - case_count - method_count]
-            main_result = f"Organization: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "organizations"
+            results.append(f"Organization: {result['title']} - {result['description']} [Link: {result['url']}]")
+            suggestions.append(f"[Organization] {result['title']} - {result['url']}")
 
-    # Suggestions
-    suggestions = []
-    if main_result:
-        _, category = main_result
-        top_suggestions = combined_scores.topk(k=suggestion_k + 1)  # Get top-k suggestions (excluding main result)
-
-        for score, idx in zip(top_suggestions.values, top_suggestions.indices):
-            idx = idx.item()
-            score = score.item()
-            if score < 0.5:  # Ensure relevance
-                continue
-
-            if category == "cases" and idx < case_count:
-                result = cases_df.iloc[idx]
-                suggestions.append(f"Case: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
-            elif category == "methods" and case_count <= idx < case_count + method_count:
-                result = methods_df.iloc[idx - case_count]
-                suggestions.append(f"Method: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
-            elif category == "organizations" and idx >= case_count + method_count:
-                result = organizations_df.iloc[idx - case_count - method_count]
-                suggestions.append(f"Organization: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
-
-    return main_result, suggestions
+    return results, suggestions
 
 # Streamlit UI
 
 st.title("Participedia Chatbot")
 st.write("Welcome! This chatbot uses advanced semantic and word-based matching to provide accurate answers.")
 
-# User input for semantic search
-st.subheader("Ask Your Question")
-user_query = st.text_input("Your question:")
+# Dropdown for categories
+category = st.selectbox("Choose a category:", ["Choose a category"] + list(categories.keys()))
 
-if st.button("Submit"):
-    if user_query.strip():
-        main_result, suggestions = combined_search_with_suggestions(user_query)
+if category != "Choose a category":
+    st.subheader(f"Questions for {category}")
+    selected_question = st.selectbox("Choose a question to get started:", ["Choose a question"] + list(categories[category].keys()))
 
-        # Display main result
-        if main_result:
+    # User input for custom query
+    st.subheader("Ask Your Own Question")
+    user_query = st.text_input("Your question:")
+
+    if st.button("Submit"):
+        if selected_question != "Choose a question":
             st.write("**Answer:**")
-            st.markdown(main_result[0])
-
-            # Display related suggestions
-            if suggestions:
-                st.write("**Related Suggestions:**")
-                for suggestion in suggestions:
-                    st.markdown(f"- {suggestion}")
-        else:
-            st.markdown("I'm sorry, I couldn't find a relevant answer.")
+            st.markdown(categories[category][selected_question])
+        elif user_query.strip():
+            results, suggestions = combined_search(user_query)
+            if results:
+                st.markdown(f"**Answer:** {results[0]}")  # Show the top result
+                if suggestions:
+                    st.write("### Related Suggestions:")
+                    for suggestion in suggestions:  # Display suggestions with links
+                        st.markdown(f"- {suggestion}")
+            else:
+                st.markdown("I'm sorry, I couldn't find a relevant answer.")
 
 # Footer
 st.sidebar.write("This chatbot is powered by Participedia datasets and Streamlit.")
