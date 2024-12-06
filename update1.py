@@ -1,97 +1,118 @@
 import streamlit as st
 import pandas as pd
+from sentence_transformers import SentenceTransformer, util
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+st.set_page_config(page_title="Participatory Democracy Chatbot", layout="wide")
 
 # Load the cleaned datasets
 cases_df = pd.read_csv("cleaned_cases.csv")
 methods_df = pd.read_csv("cleaned_methods.csv")
 organizations_df = pd.read_csv("cleaned_organizations.csv")
 
-# Combine text for vectorization
-all_text = pd.concat([
-    cases_df['title'] + " " + cases_df['description'],
-    methods_df['title'] + " " + methods_df['description'],
-    organizations_df['title'] + " " + organizations_df['description']
-], ignore_index=True).fillna("")
+# Combine datasets for embedding and TF-IDF
+cases_texts = (cases_df['title'] + " " + cases_df['description']).fillna("").tolist()
+methods_texts = (methods_df['title'] + " " + methods_df['description']).fillna("").tolist()
+organizations_texts = (organizations_df['title'] + " " + organizations_df['description']).fillna("").tolist()
+all_texts = cases_texts + methods_texts + organizations_texts
+
+# Precompute SentenceTransformer embeddings and cache them
+@st.cache_resource
+def load_model_and_embeddings():
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    embeddings = model.encode(all_texts, convert_to_tensor=True)
+    return model, embeddings
+
+model, all_embeddings = load_model_and_embeddings()
 
 # Generate TF-IDF vectors
 vectorizer = TfidfVectorizer()
-text_vectors = vectorizer.fit_transform(all_text)
+tfidf_vectors = vectorizer.fit_transform(all_texts)
 
-# Define chatbot logic
-def chatbot_response(user_query):
-    query_vector = vectorizer.transform([user_query])
-    similarity_scores = cosine_similarity(query_vector, text_vectors)
-    max_score_idx = similarity_scores.argmax()
+# Categorize the dataset for referencing
+case_count = len(cases_texts)
+method_count = len(methods_texts)
 
-    if similarity_scores[0, max_score_idx] < 0.2:
-        return "I'm sorry, I can only provide information related to participatory democracy cases, methods, and organizations."
+# Combined Search Function: Semantic + TF-IDF with Suggestions
+def combined_search_with_suggestions(query, semantic_weight=0.7, tfidf_weight=0.3, top_k=1, suggestion_k=3):
+    # Encode the query using SentenceTransformer
+    query_embedding = model.encode(query, convert_to_tensor=True)
+    semantic_scores = util.cos_sim(query_embedding, all_embeddings)[0]  # Semantic similarity scores
 
-    if max_score_idx < len(cases_df):
-        result = cases_df.iloc[max_score_idx]
-        return f"Case: {result['title']} - {result['description']} [Link: {result['url']}]"
-    elif max_score_idx < len(cases_df) + len(methods_df):
-        idx = max_score_idx - len(cases_df)
-        result = methods_df.iloc[idx]
-        return f"Method: {result['title']} - {result['description']} [Link: {result['url']}]"
-    else:
-        idx = max_score_idx - len(cases_df) - len(methods_df)
-        result = organizations_df.iloc[idx]
-        return f"Organization: {result['title']} - {result['description']} [Link: {result['url']}]"
+    # Compute TF-IDF cosine similarity
+    query_vector = vectorizer.transform([query])
+    tfidf_scores = cosine_similarity(query_vector, tfidf_vectors)[0]  # TF-IDF cosine similarity scores
+
+    # Combine the scores
+    combined_scores = semantic_weight * semantic_scores + tfidf_weight * tfidf_scores
+    top_results = combined_scores.topk(k=top_k)  # Get top-k main results
+
+    # Primary result
+    main_result = None
+    if top_results.values[0].item() > 0.5:  # Strict threshold for the main result
+        idx = top_results.indices[0].item()
+        score = top_results.values[0].item()
+
+        if idx < case_count:
+            result = cases_df.iloc[idx]
+            main_result = f"Case: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "cases"
+        elif idx < case_count + method_count:
+            result = methods_df.iloc[idx - case_count]
+            main_result = f"Method: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "methods"
+        else:
+            result = organizations_df.iloc[idx - case_count - method_count]
+            main_result = f"Organization: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "organizations"
+
+    # Suggestions
+    suggestions = []
+    if main_result:
+        _, category = main_result
+        top_suggestions = combined_scores.topk(k=suggestion_k + 1)  # Get top-k suggestions (excluding main result)
+
+        for score, idx in zip(top_suggestions.values, top_suggestions.indices):
+            idx = idx.item()
+            score = score.item()
+            if score < 0.5:  # Ensure relevance
+                continue
+
+            if category == "cases" and idx < case_count:
+                result = cases_df.iloc[idx]
+                suggestions.append(f"Case: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
+            elif category == "methods" and case_count <= idx < case_count + method_count:
+                result = methods_df.iloc[idx - case_count]
+                suggestions.append(f"Method: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
+            elif category == "organizations" and idx >= case_count + method_count:
+                result = organizations_df.iloc[idx - case_count - method_count]
+                suggestions.append(f"Organization: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
+
+    return main_result, suggestions
 
 # Streamlit UI
-st.set_page_config(page_title="Participatory Democracy Chatbot", layout="wide")
-st.title("Participatory Democracy Chatbot Dashboard 🤖")
-st.write("Welcome! I can help you explore participatory democracy cases, methods, and organizations.")
 
-# Greet user and provide options
-st.sidebar.header("Choose a Category")
-category = st.sidebar.selectbox(
-    "Select a category to get started:",
-    ["General", "Cases", "Methods", "Organizations"]
-)
+st.title("Participatory Democracy Chatbot 🤖")
+st.write("Welcome! This chatbot uses advanced semantic and word-based matching to provide accurate answers.")
 
-# Provide instructions based on category
-if category == "General":
-    st.subheader("Welcome to the Participatory Democracy Chatbot!")
-    st.write("Ask me anything about participatory democracy. For example:")
-    st.write("- What is participatory budgeting?")
-    st.write("- How do citizens deliberate?")
-elif category == "Cases":
-    st.subheader("Ask me about Cases!")
-    st.write("Examples of questions:")
-    st.write("- Tell me about participatory budgeting.")
-    st.write("- What is the case about community engagement?")
-elif category == "Methods":
-    st.subheader("Ask me about Methods!")
-    st.write("Examples of questions:")
-    st.write("- What is deliberative democracy?")
-    st.write("- How does citizen assembly work?")
-elif category == "Organizations":
-    st.subheader("Ask me about Organizations!")
-    st.write("Examples of questions:")
-    st.write("- Which organization focuses on youth?")
-    st.write("- What organizations promote participatory governance?")
-
-# Chat interface
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
+# User input for semantic search
+st.subheader("Ask Your Question")
 user_query = st.text_input("Your question:")
 
 if st.button("Submit"):
     if user_query.strip():
-        response = chatbot_response(user_query)
-        st.session_state.chat_history.append({"user": user_query, "bot": response})
+        main_result, suggestions = combined_search_with_suggestions(user_query)
 
-# Display chat history
-if st.session_state.chat_history:
-    st.write("### Chat History")
-    for chat in st.session_state.chat_history:
-        st.markdown(f"**You:** {chat['user']}")
-        st.markdown(f"**Bot:** {chat['bot']}")
-        st.markdown("---")
+        # Display main result
+        if main_result:
+            st.write("**Answer:**")
+            st.markdown(main_result[0])
+
+            # Display related suggestions
+            if suggestions:
+                st.write("**Related Suggestions:**")
+                for suggestion in suggestions:
+                    st.markdown(f"- {suggestion}")
+        else:
+            st.markdown("I'm sorry, I couldn't find a relevant answer.")
 
 # Footer
 st.sidebar.write("This chatbot is powered by Participedia datasets and Streamlit.")
