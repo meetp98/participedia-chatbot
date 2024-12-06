@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -11,108 +10,100 @@ cases_df = pd.read_csv("cleaned_cases.csv")
 methods_df = pd.read_csv("cleaned_methods.csv")
 organizations_df = pd.read_csv("cleaned_organizations.csv")
 
-# Combine datasets for embedding and TF-IDF
-cases_texts = (cases_df['title'] + " " + cases_df['description']).fillna("").tolist()
-methods_texts = (methods_df['title'] + " " + methods_df['description']).fillna("").tolist()
-organizations_texts = (organizations_df['title'] + " " + organizations_df['description']).fillna("").tolist()
-all_texts = cases_texts + methods_texts + organizations_texts
-
-# Precompute SentenceTransformer embeddings and cache them
-@st.cache_resource
-def load_model_and_embeddings():
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    embeddings = model.encode(all_texts, convert_to_tensor=True)
-    return model, embeddings
-
-model, all_embeddings = load_model_and_embeddings()
+# Combine text for vectorization
+all_text = pd.concat([
+    cases_df['title'] + " " + cases_df['description'],
+    methods_df['title'] + " " + methods_df['description'],
+    organizations_df['title'] + " " + organizations_df['description']
+], ignore_index=True).fillna("")
 
 # Generate TF-IDF vectors
 vectorizer = TfidfVectorizer()
-tfidf_vectors = vectorizer.fit_transform(all_texts)
+text_vectors = vectorizer.fit_transform(all_text)
 
-# Categorize the dataset for referencing
-case_count = len(cases_texts)
-method_count = len(methods_texts)
+# Prebuilt questions categorized
+categories = {
+    "General": {
+        "What is Participedia and how does it work?":
+            "Participedia is a platform for sharing and collecting information on inclusive civic engagement and democratic innovations around the world. Users can browse case studies, methods, and organizations related to participatory governance. More information can be found here: https://participedia.net/about",
+        "How can I contribute to Participedia?":
+            "You can contribute to Participedia by adding new case studies, methods, or organizations, or by editing and improving existing content. Find out more about how to contribute here: https://participedia.net/getting-started",
+        "Can I use Participedia for my research or teaching?":
+            "Yes, Participedia is a valuable resource for researchers and educators looking for examples of democratic innovations. The platform offers a repository of information on various participatory processes that can be accessed and used for academic purposes. Explore the research and teaching tools available on Participedia here: https://participedia.net/teaching"
+    },
+    "Cases": {
+        "What is participatory budgeting, and how is it implemented?":
+            "Participatory budgeting is a democratic process in which community members directly decide how to allocate part of a public budget. It typically involves a series of meetings and deliberations where residents propose and vote on projects to be funded with public money. Learn more: https://participedia.net/case/5524",
+        "Can you tell me about a case where citizen engagement improved governance?":
+            "One example is the participatory budgeting process in Porto Alegre, Brazil. This initiative allowed citizens to directly participate in deciding how municipal funds were allocated, leading to better allocation of resources and increased trust in government. Learn more: https://participedia.net/case/5524",
+        "What is an example of participatory democracy in education?":
+            "One example is the 'Student Voice Committee' in New Zealand, where students collaborate with staff to provide feedback for improving the school environment. Learn more: https://participedia.net/case/4196"
+    },
+    "Methods": {
+        "What is deliberative democracy?":
+            "Deliberative democracy involves public decisions made through thoughtful discussions among citizens. For example, the G1000 in Belgium brought together randomly selected citizens to deliberate on policy issues. Learn more: https://participedia.net/case/485",
+        "How does a citizen assembly work?":
+            "A citizen assembly is a deliberative process that brings together randomly selected citizens to discuss and make decisions on a particular issue. For example: https://participedia.net/case/5166",
+        "What are participatory budgeting methods?":
+            "Participatory budgeting methods include deliberative forums, voting, and citizen engagement. An example is the 'Porto Alegre Participatory Budgeting Process' in Brazil: https://participedia.net/case/44"
+    },
+    "Organizations": {
+        "What organizations promote participatory governance globally?":
+            "Organizations like the Participatory Budgeting Project (https://participedia.net/organization/4377) and IAP2 (https://participedia.net/organization/231) promote participatory governance globally.",
+        "Can you tell me about organizations working on environmental democracy?":
+            "Examples include the Environmental Democracy Index (https://participedia.net/en/organizations/international-union-conservation-nature-iucn) and the International Union for Conservation of Nature (https://participedia.net/organization/1053)."
+    }
+}
 
-# Combined Search Function: Semantic + TF-IDF with Suggestions
-def combined_search_with_suggestions(query, semantic_weight=0.7, tfidf_weight=0.3, top_k=1, suggestion_k=3):
-    # Encode the query using SentenceTransformer
-    query_embedding = model.encode(query, convert_to_tensor=True)
-    semantic_scores = util.cos_sim(query_embedding, all_embeddings)[0]  # Semantic similarity scores
+# Define chatbot logic for user input
+def chatbot_response(user_query):
+    # TF-IDF logic for custom questions
+    query_vector = vectorizer.transform([user_query])
+    similarity_scores = cosine_similarity(query_vector, text_vectors)
+    max_score_idx = similarity_scores.argmax()
 
-    # Compute TF-IDF cosine similarity
-    query_vector = vectorizer.transform([query])
-    tfidf_scores = cosine_similarity(query_vector, tfidf_vectors)[0]  # TF-IDF cosine similarity scores
+    if similarity_scores[0, max_score_idx] < 0.2:
+        return "I'm sorry, I can only provide information related to participatory democracy cases, methods, and organizations."
 
-    # Combine the scores
-    combined_scores = semantic_weight * semantic_scores + tfidf_weight * tfidf_scores
-    top_results = combined_scores.topk(k=top_k)  # Get top-k main results
-
-    # Primary result
-    main_result = None
-    if top_results.values[0].item() > 0.5:  # Strict threshold for the main result
-        idx = top_results.indices[0].item()
-        score = top_results.values[0].item()
-
-        if idx < case_count:
-            result = cases_df.iloc[idx]
-            main_result = f"Case: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "cases"
-        elif idx < case_count + method_count:
-            result = methods_df.iloc[idx - case_count]
-            main_result = f"Method: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "methods"
-        else:
-            result = organizations_df.iloc[idx - case_count - method_count]
-            main_result = f"Organization: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})", "organizations"
-
-    # Suggestions
-    suggestions = []
-    if main_result:
-        _, category = main_result
-        top_suggestions = combined_scores.topk(k=suggestion_k + 1)  # Get top-k suggestions (excluding main result)
-
-        for score, idx in zip(top_suggestions.values, top_suggestions.indices):
-            idx = idx.item()
-            score = score.item()
-            if score < 0.5:  # Ensure relevance
-                continue
-
-            if category == "cases" and idx < case_count:
-                result = cases_df.iloc[idx]
-                suggestions.append(f"Case: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
-            elif category == "methods" and case_count <= idx < case_count + method_count:
-                result = methods_df.iloc[idx - case_count]
-                suggestions.append(f"Method: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
-            elif category == "organizations" and idx >= case_count + method_count:
-                result = organizations_df.iloc[idx - case_count - method_count]
-                suggestions.append(f"Organization: {result['title']} - {result['description']} [Link: {result['url']}] (Score: {score:.2f})")
-
-    return main_result, suggestions
+    if max_score_idx < len(cases_df):
+        result = cases_df.iloc[max_score_idx]
+        return f"Case: {result['title']} - {result['description']} [Link: {result['url']}]"
+    elif max_score_idx < len(cases_df) + len(methods_df):
+        idx = max_score_idx - len(cases_df)
+        result = methods_df.iloc[idx]
+        return f"Method: {result['title']} - {result['description']} [Link: {result['url']}]"
+    else:
+        idx = max_score_idx - len(cases_df) - len(methods_df)
+        result = organizations_df.iloc[idx]
+        return f"Organization: {result['title']} - {result['description']} [Link: {result['url']}]"
 
 # Streamlit UI
 
-st.title("Participatory Democracy Chatbot 🤖")
-st.write("Welcome! This chatbot uses advanced semantic and word-based matching to provide accurate answers.")
+st.title("Participatory Democracy Chatbot ")
+st.write("Welcome! Select a category and ask a question or type your own.")
 
-# User input for semantic search
-st.subheader("Ask Your Question")
-user_query = st.text_input("Your question:")
+# Dropdown for categories
+category = st.selectbox("Choose a category:", ["Choose a category"] + list(categories.keys()))
 
-if st.button("Submit"):
-    if user_query.strip():
-        main_result, suggestions = combined_search_with_suggestions(user_query)
+# Display prebuilt questions for the selected category
+if category != "Choose a category":
+    st.subheader(f"Questions for {category}")
+    selected_question = st.selectbox("Choose a question to get started:", ["Choose a question"] + list(categories[category].keys()))
 
-        # Display main result
-        if main_result:
+    # User input for custom query
+    st.subheader("Ask Your Own Question")
+    user_query = st.text_input("Your question:")
+
+    # Submit button
+    if st.button("Submit"):
+        # Display answer for prebuilt question
+        if selected_question and selected_question != "Choose a question":
             st.write("**Answer:**")
-            st.markdown(main_result[0])
-
-            # Display related suggestions
-            if suggestions:
-                st.write("**Related Suggestions:**")
-                for suggestion in suggestions:
-                    st.markdown(f"- {suggestion}")
-        else:
-            st.markdown("I'm sorry, I couldn't find a relevant answer.")
+            st.markdown(categories[category][selected_question])
+        # Display answer for custom query
+        elif user_query.strip():
+            st.write("**Answer:**")
+            st.markdown(chatbot_response(user_query))
 
 # Footer
 st.sidebar.write("This chatbot is powered by Participedia datasets and Streamlit.")
