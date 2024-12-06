@@ -90,7 +90,7 @@ def combined_search_with_suggestions(query, semantic_weight=0.7, tfidf_weight=0.
 
 # Streamlit UI
 
-st.title("Participatory Democracy Chatbot 🤖")
+st.title("Participedia Chatbot")
 st.write("Welcome! This chatbot uses advanced semantic and word-based matching to provide accurate answers.")
 
 # User input for semantic search
