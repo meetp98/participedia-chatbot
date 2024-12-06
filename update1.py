@@ -3,6 +3,8 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+st.set_page_config(page_title="Participatory Democracy Chatbot", layout="wide")
+
 # Load the cleaned datasets
 cases_df = pd.read_csv("cleaned_cases.csv")
 methods_df = pd.read_csv("cleaned_methods.csv")
@@ -76,6 +78,7 @@ def chatbot_response(user_query):
         return f"Organization: {result['title']} - {result['description']} [Link: {result['url']}]"
 
 # Streamlit UI
+<<<<<<< HEAD
 st.set_page_config(page_title="Participatory Democracy Chatbot", layout="wide")
 st.title("Participatory Democracy Chatbot ")
 st.write("Welcome! Select a category and ask a question or type your own.")
@@ -92,6 +95,24 @@ if category != "Choose a category":
     st.subheader("Ask Your Own Question")
     user_query = st.text_input("Your question:")
 
+=======
+
+st.title("Participatory Democracy Chatbot ")
+st.write("Welcome! Select a category and ask a question or type your own.")
+
+# Dropdown for categories
+category = st.selectbox("Choose a category:", ["Choose a category"] + list(categories.keys()))
+
+# Display prebuilt questions for the selected category
+if category != "Choose a category":
+    st.subheader(f"Questions for {category}")
+    selected_question = st.selectbox("Choose a question to get started:", ["Choose a question"] + list(categories[category].keys()))
+
+    # User input for custom query
+    st.subheader("Ask Your Own Question")
+    user_query = st.text_input("Your question:")
+
+>>>>>>> fd1298ce7409777b72c4b8a2a60d33c1e5a2ae02
     # Submit button
     if st.button("Submit"):
         # Display answer for prebuilt question
